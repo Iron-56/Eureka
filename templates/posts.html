@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>All Posts</title>
+</head>
+<body>
+	<h1>All Posts</h1>
+	<a href="{{ url_for('home') }}">Back to Home</a>
+
+	<form method="GET">
+		<input type="text" name="tag" placeholder="Filter by tag">
+		<button type="submit">Search</button>
+	</form>
+
+	<ul>
+		{% for post in posts %}
+			<li>
+				<strong>{{ post["users"]["username"] }}:</strong> {{ post["content"] }}<br>
+				<small>Tags: {{ post["tags"] }}</small>
+			</li>
+		{% endfor %}
+	</ul>
+</body>
+</html>

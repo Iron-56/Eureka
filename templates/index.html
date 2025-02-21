@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Flask Posts</title>
+</head>
+<body>
+	<h1>Welcome, {{ current_user.username if current_user.is_authenticated else 'Guest' }}</h1>
+
+	{% if current_user.is_authenticated %}
+		<form method="POST" action="{{ url_for('post') }}">
+			<textarea name="content" placeholder="Write something..." required></textarea>
+			<input type="text" name="tags" placeholder="Enter tags (comma-separated)">
+			<button type="submit">Post</button>
+		</form>
+		<a href="{{ url_for('logout') }}">Logout</a>
+	{% else %}
+		<a href="{{ url_for('login') }}">Login</a>
+	{% endif %}
+
+	<a href="{{ url_for('view_posts') }}">View All Posts</a>
+
+	<h1>Your Posts</h1>
+
+    <ul>
+        {% for post in user_posts %}
+			<li>{{ post.content }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
