@@ -26,6 +26,14 @@
     <ul>
         {% for post in user_posts %}
 			<li>{{ post.content }}</li>
+			{% if post["interested"] %}
+				<p>Interested Users:</p>
+				<ul>
+					{% for user in post["interested"] %}
+						<li>{{ user["users"]["username"] }}</li>
+					{% endfor %}
+				</ul>
+			{% endif %}
         {% endfor %}
     </ul>
 </body>

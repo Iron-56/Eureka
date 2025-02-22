@@ -6,12 +6,10 @@ from config import get_client
 
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SECRET_KEY'] = '24b9'
 
 supabase = get_client()
 
-# db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -22,13 +20,6 @@ class User(UserMixin):
 		self.username = user_data["username"]
 		self.email = user_data["email"]
 		self.password = user_data["password"]
-
-# class Post(db.Model):
-# 	id = db.Column(db.Integer, primary_key=True)
-# 	user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-# 	content = db.Column(db.Text, nullable=False)
-# 	tags = db.Column(db.String(200), nullable=True)
-# 	user = db.relationship('User', backref=db.backref('posts', lazy=True))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -41,13 +32,7 @@ def load_user(user_id):
 def home():
 	user_posts = []
 	if current_user.is_authenticated:
-		user_posts = user_posts = (
-			supabase.table("posts")
-			.select("*")
-			.eq("user_id", current_user.id)
-			.order("id", desc=True)
-			.execute()
-		).data
+		user_posts = supabase.table("posts").select("*, interested(user_id, users(username))").eq("user_id", current_user.id).order("id", desc=True).execute().data
 
 	return render_template('index.html', user_posts=user_posts)
 
@@ -81,10 +66,10 @@ def register():
 def login():
 	if request.method == 'POST':
 		response = supabase.table("users").select("*").eq("email", request.form['email']).single().execute()
-		user = response.data  # Extract user data (dictionary)
+		user = response.data
 
-		if user and bcrypt.check_password_hash(user["password"], request.form["password"]):  # Use dictionary access
-			login_user(User(user))  # Convert to Flask-Login User object
+		if user and bcrypt.check_password_hash(user["password"], request.form["password"]):
+			login_user(User(user))
 			flash('Login successful!', 'success')
 			return redirect(url_for('home'))
 
@@ -122,17 +107,50 @@ def post():
 @app.route('/posts')
 def view_posts():
 	tag_filter = request.args.get('tag')
-	query = supabase.table("posts").select("*, users(username)").order("id", desc=True)
+	query = supabase.table("posts").select("*, users(username), replies(*, users(username)), interested(count)").order("id", desc=True)
 	
 	if tag_filter:
 		query = query.like("tags", f"%{tag_filter}%")
 
-	print("-------------------------------------------------------------------------------------------------")
-	print(query)
 	posts = query.execute()
 	print(posts.data)
-	print("-------------------------------------------------------------------------------------------------")
 	return render_template('posts.html', posts=posts.data, tag_filter=tag_filter)
+
+@app.route('/reply/<post_id>', methods=['POST'])
+@login_required
+def add_reply(post_id):
+	content = request.form.get('content')
+
+	if not content:
+		flash('Reply cannot be empty!', 'danger')
+		return redirect(url_for('view_posts'))
+
+	supabase.table("replies").insert({
+		"post_id": post_id,
+		"user_id": current_user.id,
+		"content": content
+	}).execute()
+
+	flash('Reply added!', 'success')
+	return redirect(url_for('view_posts'))
+
+@app.route('/interest/<post_id>', methods=['POST'])
+@login_required
+def add_interest(post_id):
+    existing_interest = supabase.table("interested").select("*").eq("post_id", post_id).eq("user_id", current_user.id).execute().data
+
+    if existing_interest:
+        flash("You have already shown interest in this post!", "warning")
+        return redirect(url_for('view_posts'))
+
+    supabase.table("interested").insert({
+        "post_id": post_id,
+        "user_id": current_user.id
+    }).execute()
+
+    flash("Marked as interested!", "success")
+    return redirect(url_for('view_posts'))
+
 
 if __name__ == '__main__':
 	app.run(debug=True)

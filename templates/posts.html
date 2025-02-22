@@ -17,8 +17,28 @@
 	<ul>
 		{% for post in posts %}
 			<li>
-				<strong>{{ post["users"]["username"] }}:</strong> {{ post["content"] }}<br>
+				<strong>{{ post["users"]["username"] }}</strong> <br>
+				<p> {{ post["content"] }} </p>
 				<small>Tags: {{ post["tags"] }}</small>
+
+				<span>{{ post["interested"][0]["count"] or 0}} Interested</span>
+
+				<form action="{{ url_for('add_interest', post_id=post['id']) }}" method="post" style="display: inline;">
+					<button type="submit">+</button>
+				</form>
+
+				<form action="{{ url_for('add_reply', post_id=post['id']) }}" method="post">
+					<input type="text" name="content" placeholder="Write a reply..." required>
+					<button type="submit">Reply</button>
+				</form>
+
+				<div style="margin-left: 20px;">
+					{% for reply in post["replies"] %}
+						<p>
+							<strong>{{ reply["users"]["username"] }}</strong>: {{ reply["content"] }}
+						</p>
+					{% endfor %}
+				</div>
 			</li>
 		{% endfor %}
 	</ul>
