@@ -1,5 +1,4 @@
 from flask import Flask, render_template, redirect, url_for, request, flash
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 
@@ -7,38 +6,33 @@ from config import get_client
 
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SECRET_KEY'] = '24b9'
 
 supabase = get_client()
 
-# db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-class User(db.Model, UserMixin):
-	id = db.Column(db.Integer, primary_key=True)
-	username = db.Column(db.String(100), unique=True, nullable=False)
-	email = db.Column(db.String(150), unique=True, nullable=False)
-	password = db.Column(db.String(200), nullable=False)
-
-class Post(db.Model):
-	id = db.Column(db.Integer, primary_key=True)
-	user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-	content = db.Column(db.Text, nullable=False)
-	tags = db.Column(db.String(200), nullable=True)
-	user = db.relationship('User', backref=db.backref('posts', lazy=True))
+class User(UserMixin):
+	def __init__(self, user_data):
+		self.id = user_data["id"]
+		self.username = user_data["username"]
+		self.email = user_data["email"]
+		self.password = user_data["password"]
 
 @login_manager.user_loader
 def load_user(user_id):
-	return User.query.get(int(user_id))
+	user = supabase.table("users").select("*").eq("id", user_id).single().execute()
+	if user.data:
+		return User(user.data)
+	return None
 
 @app.route('/')
 def home():
 	user_posts = []
 	if current_user.is_authenticated:
-		user_posts = Post.query.filter_by(user_id=current_user.id).order_by(Post.id.desc()).all()
+		user_posts = supabase.table("posts").select("*, interested(user_id, users(username))").eq("user_id", current_user.id).order("id", desc=True).execute().data
 
 	return render_template('index.html', user_posts=user_posts)
 
@@ -49,11 +43,19 @@ def register():
 		email = request.form['email']
 		password = bcrypt.generate_password_hash(request.form['password']).decode('utf-8')
 
-		user = User(username=username, email=email, password=password)
-		db.session.add(user)
-		db.session.commit()
+		user = supabase.table("users").insert({
+			"username": username,
+			"email": email,
+			"password": password
+		}).execute().data
 
-		flash('Account created successfully!', 'success')
+		if user:
+			flash('Account created successfully!', 'success')
+			login_user(User(user[0]))
+			return redirect(url_for('home'))
+		else:
+			flash('Error creating account!', 'danger')
+			
 		return redirect(url_for('login'))
 
 	return render_template('register.html')
@@ -64,14 +66,18 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 	if request.method == 'POST':
-		user = User.query.filter_by(email=request.form['email']).first()
-		if user and bcrypt.check_password_hash(user.password, request.form['password']):
-			login_user(user)
+		response = supabase.table("users").select("*").eq("email", request.form['email']).single().execute()
+		user = response.data
+
+		if user and bcrypt.check_password_hash(user["password"], request.form["password"]):
+			login_user(User(user))
 			flash('Login successful!', 'success')
 			return redirect(url_for('home'))
+
 		flash('Invalid credentials!', 'danger')
 
 	return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
@@ -90,27 +96,62 @@ def post():
 		flash('Post content cannot be empty', 'danger')
 		return redirect(url_for('home'))
 
-	new_post = Post(user_id=current_user.id, content=content, tags=tags)
-	db.session.add(new_post)
-	db.session.commit()
-	
+	post = supabase.table("posts").insert({
+		"user_id": current_user.id,
+		"content": content,
+		"tags": tags
+	}).execute()
+
 	flash('Post created successfully!', 'success')
 	return redirect(url_for('home'))
 
 @app.route('/posts')
 def view_posts():
 	tag_filter = request.args.get('tag')
-	posts = []
+	query = supabase.table("posts").select("*, users(username), replies(*, users(username)), interested(count)").order("id", desc=True)
+	
 	if tag_filter:
-		posts = Post.query.filter(Post.tags.like(f"%{tag_filter}%")).order_by(Post.id.desc()).all()
-	else:
-		posts = Post.query.order_by(Post.id.desc()).all()
+		query = query.like("tags", f"%{tag_filter}%")
 
-	# posts = Post.query.order_by(Post.id.desc()).all()
-	return render_template('posts.html', posts=posts, tag_filter=tag_filter)
+	posts = query.execute()
+	print(posts.data)
+	return render_template('posts.html', posts=posts.data, tag_filter=tag_filter)
+
+@app.route('/reply/<post_id>', methods=['POST'])
+@login_required
+def add_reply(post_id):
+	content = request.form.get('content')
+
+	if not content:
+		flash('Reply cannot be empty!', 'danger')
+		return redirect(url_for('view_posts'))
+
+	supabase.table("replies").insert({
+		"post_id": post_id,
+		"user_id": current_user.id,
+		"content": content
+	}).execute()
+
+	flash('Reply added!', 'success')
+	return redirect(url_for('view_posts'))
+
+@app.route('/interest/<post_id>', methods=['POST'])
+@login_required
+def add_interest(post_id):
+    existing_interest = supabase.table("interested").select("*").eq("post_id", post_id).eq("user_id", current_user.id).execute().data
+
+    if existing_interest:
+        flash("You have already shown interest in this post!", "warning")
+        return redirect(url_for('view_posts'))
+
+    supabase.table("interested").insert({
+        "post_id": post_id,
+        "user_id": current_user.id
+    }).execute()
+
+    flash("Marked as interested!", "success")
+    return redirect(url_for('view_posts'))
 
 
 if __name__ == '__main__':
-	with app.app_context():
-		db.create_all()
 	app.run(debug=True)

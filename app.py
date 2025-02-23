@@ -1,13 +1,13 @@
 from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
-
+from flask_cors import CORS
 from config import get_client
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '24b9'
-
+CORS(app)
 supabase = get_client()
 
 bcrypt = Bcrypt(app)
@@ -39,25 +39,22 @@ def home():
 @app.route('/register', methods=['GET', 'POST'])
 def register():
 	if request.method == 'POST':
-		username = request.form['username']
-		email = request.form['email']
-		password = bcrypt.generate_password_hash(request.form['password']).decode('utf-8')
-
+		r = request.get_json()
+		username = r['username']
+		email = r['email']
+		password = bcrypt.generate_password_hash(r['password']).decode('utf-8')
 		user = supabase.table("users").insert({
 			"username": username,
 			"email": email,
 			"password": password
 		}).execute()
-
 		if user.data:
 			flash('Account created successfully!', 'success')
-			return redirect(url_for('login'))
+			return {"Account Created":1},200
 		else:
 			flash('Error creating account!', 'danger')
-			
-		return redirect(url_for('login'))
+			return {"Account Not Created":1},400
 
-	return render_template('register.html')
 
 
 
@@ -65,17 +62,16 @@ def register():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
 	if request.method == 'POST':
-		response = supabase.table("users").select("*").eq("email", request.form['email']).single().execute()
+		r=request.get_json()
+		response = supabase.table("users").select("*").eq("email", r['email']).single().execute()
 		user = response.data
-
-		if user and bcrypt.check_password_hash(user["password"], request.form["password"]):
+		print(user)
+		if user and bcrypt.check_password_hash(user["password"], r["password"]):
 			login_user(User(user))
 			flash('Login successful!', 'success')
-			return redirect(url_for('home'))
-
+			return {'msg':"Logged In"},200
 		flash('Invalid credentials!', 'danger')
-
-	return render_template('login.html')
+		return {"msg":"Invalid Credentials"},200
 
 
 @app.route('/logout')
@@ -88,33 +84,31 @@ def logout():
 @app.route('/post', methods=['POST'])
 @login_required
 def post():
-	content = request.form.get('content')
-	tags = request.form.get('tags')
-
+	content = request.get('content')
+	tags = request.get('tags')
+	title = request.get('title')
 	if not content:
 		flash('Post content cannot be empty', 'danger')
-		return redirect(url_for('home'))
+		return {'Failed':400},400
 
 	post = supabase.table("posts").insert({
 		"user_id": current_user.id,
 		"content": content,
-		"tags": tags
+		"tags": tags,
+		"title":title,
 	}).execute()
+	return {'Sucess':'Added Post'},200
 
-	flash('Post created successfully!', 'success')
-	return redirect(url_for('home'))
 
-@app.route('/posts')
+
+@app.route('/posts',methods=['GET'])
 def view_posts():
 	tag_filter = request.args.get('tag')
 	query = supabase.table("posts").select("*, users(username), replies(*, users(username)), interested(count)").order("id", desc=True)
-	
 	if tag_filter:
 		query = query.like("tags", f"%{tag_filter}%")
-
 	posts = query.execute()
-	print(posts.data)
-	return render_template('posts.html', posts=posts.data, tag_filter=tag_filter)
+	return posts.data,200
 
 @app.route('/reply/<post_id>', methods=['POST'])
 @login_required
@@ -133,6 +127,8 @@ def add_reply(post_id):
 
 	flash('Reply added!', 'success')
 	return redirect(url_for('view_posts'))
+
+
 
 @app.route('/interest/<post_id>', methods=['POST'])
 @login_required
