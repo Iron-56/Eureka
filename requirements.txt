@@ -1,5 +1,0 @@
-flask
-flask-login
-flask-bcrypt
-supabase
-flask-cors

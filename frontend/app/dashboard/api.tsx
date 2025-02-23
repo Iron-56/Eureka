@@ -2,7 +2,7 @@ import { FormEvent } from "react";
 
 export async function GetAllPost() {
     try {
-        const response = await fetch("http://127.0.0.1:5000/posts", {
+        const response = await fetch("https://eureka-blond.vercel.app/posts", {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
@@ -45,38 +45,35 @@ export async function GetAllPost() {
 }
 
 
-
-
 export async function AddAPost(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+
+    const req = {
+        title: data.get("title"),
+        content: data.get("content"),
+        tags: data.get("tags"),
+    };
+
+    if (!req.title || !req.content) {
+        console.error("Title and content cannot be empty.");
+        return;
+    }
+
     try {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        console.log(data);
-        const req={
-        }
-        console.log(req);
-        const response = await fetch("http://127.0.0.1:5000/post", {
+        const response = await fetch("https://eureka-blond.vercel.app/post", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(req)
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(req),
         });
+
         if (!response.ok) {
-            console.error("Failed to fetch data:", response.statusText);
+            console.error("Failed to post:", response.statusText);
             return;
         }
-        const result = await response.json();
-        return(GetAllPost());
+
+        return GetAllPost();
     } catch (error) {
-        console.error("Error fetching data:", error);
-        return([{
-            title: "Title Not Loaded Properly",
-            author: "Author",
-            desc: "No Description",
-            interested: 0,
-            tags: ["AI", "ML", "Web", "DeepNet", "Blockchain"],
-            comments: [[""]],
-        }])
+        console.error("Error posting:", error);
     }
 }

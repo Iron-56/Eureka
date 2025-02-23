@@ -10,7 +10,7 @@ export async function Register(event: FormEvent<HTMLFormElement>) {
             email:data.get('email'),
             password:data.get('password'),
         }
-        const response = await fetch("http://127.0.0.1:5000/register", {
+        const response = await fetch("https://eureka-blond.vercel.app/register", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -37,7 +37,7 @@ export async function Login(event: FormEvent<HTMLFormElement>) {
             email:data.get('email'),
             password:data.get('password'),
         }
-        const response = await fetch("http://127.0.0.1:5000/login", {
+        const response = await fetch("https://eureka-blond.vercel.app/login", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
